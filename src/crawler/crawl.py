@@ -1,21 +1,25 @@
+# -*- coding: utf-8 -*-
 '''
 Created on 2011/12/13
 
 @author: EE
 '''
-from src.lib.BeautifulSoup import BeautifulSoup
+from lib.BeautifulSoup import BeautifulSoup
+import elementtree.ElementTree as ET
 import urllib2
 import re
 import codecs
 import os
+from youtube.getStatisticsFromYT import getViewCount
 
-startId = 5122
+startId = 3
 endId   = 7725
+minViewCount = 200000
 
 siteUrl = "http://lyrics.oiktv.com/"
-lyricsDbPath = "../../resources/lyrics2/"
+lyricsDbPath = "../../resources/lyrics_hot/"
 
-def fetchSong(url):
+def fetchSong(url, viewCount):
     try:
         #Get song info from url
         songInfo = {}
@@ -24,7 +28,6 @@ def fetchSong(url):
         for token in tokens:
             toks = token.split('=')
             songInfo[toks[0]] = int(toks[1])
-        #print songInfo
         
         #fetch the html
         lyricsWeb = urllib2.urlopen(url)  
@@ -34,36 +37,41 @@ def fetchSong(url):
         soup = BeautifulSoup(webContent)
     
         lyrics = soup.findAll(id="mylrc")[0].contents
-        author = soup.findAll(attrs={'class' : 'link_hb'})[0].contents
-        album = soup.findAll(attrs={'class' : 'link_hb'})[1].contents
-        title = soup.findAll(attrs={'class' : 'link_hb'})[2].contents
-    
-        #write to an xml file    
-        xml = "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n" + "<xml>\n" + "<doc>\n"
-        xml += "<sid>" + str(songInfo[u'sid']) + "</sid>\n"
-        xml += "<aid>" + str(songInfo[u'aid']) + "</aid>\n"
-        xml += "<lid>" + str(songInfo[u'lid']) + "</lid>\n"
-        xml += "<title>"
-        for w in title:
-            xml += w 
-        xml += "</title>\n"
-        xml += "<author>"
-        for w in author:
-            xml += w 
-        xml += "</author>\n"
-        xml += "<lyrics>\n"
-        for s in lyrics:
-            for w in s:
-                xml += w
-        xml += "</lyrics>\n"
-        xml += "</doc>\n"
-        xml += "</xml>\n"
+        author = soup.findAll(attrs={'class' : 'link_hb'})[0].contents[0]
+        album = soup.findAll(attrs={'class' : 'link_hb'})[1].contents[0]
+        title = soup.findAll(attrs={'class' : 'link_hb'})[2].contents[0]    
         
-        #write into db    
-        filename = lyricsDbPath + str(songInfo['lid']) + ".txt"
-        f = codecs.open(filename, 'w', 'utf-8')
-        f.write(xml)
-        f.close()
+        #print lyrics
+        lyricsText = ''
+        for line in lyrics:
+            for t in line:
+                lyricsText += t                       
+        
+        #Construct the xml
+        root = ET.Element("xml")
+        doc = ET.SubElement(root, "doc")
+        
+        sidNode = ET.SubElement(doc, "sid")
+        sidNode.text = str(songInfo[u'sid'])
+        aidNode = ET.SubElement(doc, "aid")
+        aidNode.text = str(songInfo[u'aid'])
+        lidNode = ET.SubElement(doc, "lid")
+        lidNode.text = str(songInfo[u'lid'])        
+        titleNode = ET.SubElement(doc, "title")
+        titleNode.text = title
+        authorNode = ET.SubElement(doc, "author")
+        authorNode.text = author
+        viewCountNode = ET.SubElement(doc, "viewCount")
+        viewCountNode.text = str(viewCount)
+        lyricsNode = ET.SubElement(doc, "lyrics")
+        lyricsNode.text = lyricsText
+        
+                       
+        #Construct the tree
+        tree = ET.ElementTree(root)
+        filename = lyricsDbPath + str(songInfo['lid']) + ".txt"        
+        tree.write(filename, "utf-8")
+        
     except:
         pass
 
@@ -89,9 +97,14 @@ for i in range(startId, endId):
             url = page['href']
             wantedPages.append(url)
             
-    if len(wantedPages) > 1:
+    if len(wantedPages) > 1: #find those who has more than 20 albums    
+        
         maxPageNum = 1 #Max 1 page for each singer
         pageNum = 0
+        maxSongNum = 250
+        songNum = 0  
+        fetchNum = 0
+        
         for url in wantedPages:
             pageNum += 1
             if pageNum > maxPageNum:
@@ -102,14 +115,28 @@ for i in range(startId, endId):
             webContent = lyricsWeb.read()  
             lyricsWeb.close()
             
-            maxSongNum = 50
-            songNum = 0            
+                      
             ahref = soup.findAll('a', attrs={'class' : 'link_04'})
             for a in ahref:
                 songNum += 1
+                #if songNum <= 50:
+                #    continue
                 if songNum > maxSongNum:
                     break
                 print songNum
-                lyricsUrl = siteUrl + a['href']                
-                fetchSong(lyricsUrl)
                 
+                title = ''
+                if len(a.contents) > 0:
+                    for w in a.contents:
+                        title += w
+                if title != None and title != '':
+                    viewCount = getViewCount(title)
+                    if viewCount > minViewCount:
+                        print title
+                        print viewCount                        
+                        lyricsUrl = siteUrl + a['href']
+                        fetchSong(lyricsUrl, viewCount)
+                        fetchNum += 1
+        
+        
+        print 'fetched: ', fetchNum
