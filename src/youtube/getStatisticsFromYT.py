@@ -4,19 +4,27 @@ Created on 2012/1/2
 
 @author: EE
 '''
-from src.lib.BeautifulSoup import BeautifulSoup
+from lib.BeautifulSoup import BeautifulSoup
 import urllib2
-import elementtree.ElementTree as ET
 
- 
-youtube = 'http://gdata.youtube.com/feeds/api/videos?v=2&max-results=1&q='
-query = u'孤獨患者'
 
-web = urllib2.urlopen("http://gdata.youtube.com/feeds/api/videos?v=2&q=%E9%99%B3%E5%A5%95%E8%BF%85&max-results=1")
-content = web.read()
-web.close()
+def getViewCount(songTitle): 
+    
+    try:
+        youtube = 'http://gdata.youtube.com/feeds/api/videos?v=2&max-results=1&q='
+        #songTitle = urllib2.quote(songTitle)
+        #print songTitle
+        url = youtube + songTitle     
+        #print url  
+        
+        web = urllib2.urlopen(url)
+        content = web.read()
+        web.close()
+        
+        soup = BeautifulSoup(content)
+        stats = soup.findAll('yt:statistics')
+        
+        return int(stats[0]['viewcount'])
 
-soup = BeautifulSoup(content)
-stats = soup.findAll('yt:statistics')
-
-print stats[0]['viewcount']
+    except:
+        return 0
